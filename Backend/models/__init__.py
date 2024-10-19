@@ -10,5 +10,8 @@ from .models import (
     RetrieveData,
     UpdateData,
     DeleteData,
-    DataResponse
+    DataResponse,
+    Feedback,
+    StateRequest,
+    StateResponse
 )

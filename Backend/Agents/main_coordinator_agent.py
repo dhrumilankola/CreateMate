@@ -1,10 +1,10 @@
 from uagents import Agent, Context, Model
 from uagents.setup import fund_agent_if_low
-from uagents.query import query_agent
-from models import UserInput, Schedule, ContentRequest, GeneratedContent, TopicSuggestion, TopicRequest, StoreData, Feedback, DataResponse
+from uagents.query import query
+from Backend.models import UserInput, Schedule, ContentRequest, GeneratedContent, TopicSuggestion, TopicRequest, StoreData, Feedback, DataResponse, StateResponse, StateRequest
 from typing import List, Optional, Dict
 import os
-from config import Config
+from Backend.config import Config
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,23 +13,34 @@ load_dotenv()
 # Main Coordinator Agent
 main_agent = Agent(
     name="main_coordinator",
-    seed=os.getenv("MAIN_COORDINATOR_SEED", "main_coordinator_secret_seed_phrase")
+    seed=Config.MAIN_COORDINATOR_SEED,
+    port=Config.MAIN_COORDINATOR_PORT,  # Set the port to 8005,
+    endpoint=[f"http://127.0.0.1:{Config.MAIN_COORDINATOR_PORT}/submit"]
 )
 
 # Fund the agent if needed
 fund_agent_if_low(main_agent.wallet.address())
 
-# Define agent endpoints
+# Define agent endpoints and addresses
 SCHEDULING_AGENT_ENDPOINT = Config.SCHEDULING_AGENT_ENDPOINT
 CONTENT_GENERATION_AGENT_ENDPOINT = Config.CONTENT_GENERATION_AGENT_ENDPOINT
 TOPIC_SUGGESTION_AGENT_ENDPOINT = Config.TOPIC_SUGGESTION_AGENT_ENDPOINT
 STORAGE_AGENT_ENDPOINT = Config.STORAGE_AGENT_ENDPOINT
 
-# Define agent addresses
-SCHEDULING_AGENT_ADDRESS = os.getenv("SCHEDULING_AGENT_ADDRESS")
-CONTENT_GENERATION_AGENT_ADDRESS = os.getenv("CONTENT_GENERATION_AGENT_ADDRESS")
-TOPIC_SUGGESTION_AGENT_ADDRESS = os.getenv("TOPIC_SUGGESTION_AGENT_ADDRESS")
-STORAGE_AGENT_ADDRESS = os.getenv("STORAGE_AGENT_ADDRESS")
+SCHEDULING_AGENT_ADDRESS = Config.SCHEDULING_AGENT_ADDRESS
+CONTENT_GENERATION_AGENT_ADDRESS = Config.CONTENT_GENERATION_AGENT_ADDRESS
+TOPIC_SUGGESTION_AGENT_ADDRESS = Config.TOPIC_SUGGESTION_AGENT_ADDRESS
+STORAGE_AGENT_ADDRESS = Config.STORAGE_AGENT_ADDRESS
+
+# Define Models for State Request and Response
+class StateRequest(Model):
+    request_type: str = "get_state"
+
+class StateResponse(Model):
+    user_input: Optional[dict]
+    schedule: Optional[dict]
+    generated_content: List[dict]
+    suggested_topics: Optional[List[str]]
 
 @main_agent.on_event("startup")
 async def initialize(ctx: Context):
@@ -47,7 +58,7 @@ async def handle_user_input(ctx: Context, sender: str, msg: UserInput):
     # Store user input
     await store_user_input(ctx, msg)
     
-    # Request schedule
+    # Send user input to Scheduling Agent
     await ctx.send(SCHEDULING_AGENT_ADDRESS, msg)
     
     # Request topic suggestions
@@ -65,7 +76,7 @@ async def handle_schedule(ctx: Context, sender: str, msg: Schedule):
     user_input = ctx.storage.get("user_input")
     first_day = msg.posting_days[0]
 
-    # Create an initial topic using user input (since we don't have topic suggestions yet)
+    # Create an initial topic using user input
     initial_topic = f"{user_input['area_of_interest']} - {user_input['content_type']} Update"
 
     content_request = ContentRequest(
@@ -118,21 +129,17 @@ async def create_content_requests_for_remaining_days(ctx: Context):
             )
             await ctx.send(CONTENT_GENERATION_AGENT_ADDRESS, content_request)
 
-
 @main_agent.on_message(model=Feedback)
 async def handle_feedback(ctx: Context, sender: str, msg: Feedback):
     ctx.logger.info(f"Received feedback: {msg}")
 
     if msg.liked:
         ctx.logger.info("User liked the initial post. Proceeding to generate topics and content for remaining days.")
-
         # Request topic suggestions for remaining days
         await request_topic_suggestions(ctx)
     else:
         ctx.logger.info("User did not like the initial post. Adjusting content generation accordingly.")
-
-        # You might want to handle this scenario, e.g., adjust parameters or notify the user
-        # For simplicity, we'll proceed to request new topic suggestions
+        # Handle accordingly
         await request_topic_suggestions(ctx)
 
 async def request_topic_suggestions(ctx: Context):
@@ -153,53 +160,39 @@ async def store_user_input(ctx: Context, user_input: UserInput):
         collection="user_inputs",
         data=user_input.dict()
     )
-    response = await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
-    if response.success:
-        ctx.logger.info(f"User input stored successfully: {response.data}")
-    else:
-        ctx.logger.error(f"Failed to store user input: {response.message}")
+    await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
 
 async def store_schedule(ctx: Context, schedule: Schedule):
     store_request = StoreData(
         collection="schedules",
         data=schedule.dict()
     )
-    response = await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
-    if response.success:
-        ctx.logger.info(f"Schedule stored successfully: {response.data}")
-    else:
-        ctx.logger.error(f"Failed to store schedule: {response.message}")
+    await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
 
 async def store_generated_content(ctx: Context, content: GeneratedContent):
     store_request = StoreData(
         collection="generated_content",
         data=content.dict()
     )
-    response = await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
-    if response.success:
-        ctx.logger.info(f"Generated content stored successfully: {response.data}")
-    else:
-        ctx.logger.error(f"Failed to store generated content: {response.message}")
+    await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
 
 async def store_suggested_topics(ctx: Context, topics: TopicSuggestion):
     store_request = StoreData(
         collection="suggested_topics",
         data=topics.dict()
     )
-    response = await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
-    if response.success:
-        ctx.logger.info(f"Suggested topics stored successfully: {response.data}")
-    else:
-        ctx.logger.error(f"Failed to store suggested topics: {response.message}")
+    await ctx.send(STORAGE_AGENT_ADDRESS, store_request)
 
-@query_agent
-async def get_current_state(ctx: Context):
-    return {
-        "user_input": ctx.storage.get("user_input"),
-        "schedule": ctx.storage.get("schedule"),
-        "generated_content": ctx.storage.get("generated_content"),
-        "suggested_topics": ctx.storage.get("suggested_topics")
-    }
+@main_agent.on_query(model=StateRequest, replies={StateResponse})
+async def get_current_state(ctx: Context, sender: str, msg: StateRequest):
+    state = StateResponse(
+        user_input=ctx.storage.get("user_input"),
+        schedule=ctx.storage.get("schedule"),
+        generated_content=ctx.storage.get("generated_content"),
+        suggested_topics=ctx.storage.get("suggested_topics")
+    )
+    # Send the state back to the requester
+    await ctx.send(sender, state)
 
 if __name__ == "__main__":
     main_agent.run()

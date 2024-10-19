@@ -1,20 +1,13 @@
 import sys
 import os
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Add the parent directory (Backend) to sys.path
-parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
     
-from config import Config
+from Backend.config import Config
 from uagents import Agent, Context
 from uagents.setup import fund_agent_if_low
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
-from models import StoreData, RetrieveData, UpdateData, DeleteData, DataResponse
+from Backend.models import StoreData, RetrieveData, UpdateData, DeleteData, DataResponse
 
 # Load environment variables
 load_dotenv()
@@ -27,9 +20,9 @@ db = client["createmate"]
 # Storage Agent
 storage_agent = Agent(
     name="storage_agent",
-    seed="storage_agent_secret_seed_phrase",
-    endpoint=f"http://localhost:8004"
-
+    seed=Config.STORAGE_AGENT_SEED,
+    port=Config.STORAGE_AGENT_PORT,
+    endpoint=[f"http://127.0.0.1:{Config.STORAGE_AGENT_PORT}/submit"]
 )
 
 # Fund the agent if needed

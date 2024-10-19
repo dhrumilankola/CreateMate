@@ -1,12 +1,12 @@
-# backend/api/routes.py
-from utils import setup_logging, validate_user_input, format_content
+# Backend/api/routes.py
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from uagents import Agent, Context
-from uagents.query import query
-from agents.main_coordinator_agent import main_agent, get_current_state
-from models import UserInput
+from uagents.query import query  # Correct import
+from Backend.config import Config  # Ensure Config is correctly imported
+from Backend.models import UserInput, Feedback, StateRequest, StateResponse
+import json
 
 router = APIRouter()
 
@@ -19,25 +19,18 @@ class UserInputRequest(BaseModel):
 class UserInputResponse(BaseModel):
     message: str
 
-class StateResponse(BaseModel):
-    user_input: Optional[dict]
-    schedule: Optional[dict]
-    generated_content: List[dict]
-    suggested_topics: List[str]
-
 class FeedbackRequest(BaseModel):
     liked: bool
     comments: Optional[str]
 
-@router.post("/feedback", response_model=UserInputResponse)
-async def submit_feedback(feedback: FeedbackRequest):
-    try:
-        # Send feedback to main coordinator agent
-        await query(main_agent.address, feedback)
-        return {"message": "Feedback submitted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+class StateResponse(BaseModel):
+    user_input: Optional[dict]
+    schedule: Optional[dict]
+    generated_content: List[dict]
+    suggested_topics: Optional[List[str]]
 
+class StateRequest(BaseModel):
+    request_type: str = "get_state"
 
 @router.post("/user-input", response_model=UserInputResponse)
 async def submit_user_input(user_input: UserInputRequest):
@@ -46,25 +39,53 @@ async def submit_user_input(user_input: UserInputRequest):
         agent_user_input = UserInput(**user_input.dict())
         
         # Send user input to main coordinator agent
-        response = await query(main_agent.address, agent_user_input)
+        response = await query(
+            destination=Config.MAIN_COORDINATOR_ADDRESS,
+            message=agent_user_input,
+            timeout=30.0  # Adjust timeout as needed
+        )
         
-        if response:
-            return {"message": "User input submitted successfully"}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to process user input")
+        # Decode the response
+        data = json.loads(response.decode_payload())
+        return {"message": data.get("message", "User input submitted successfully")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/feedback", response_model=UserInputResponse)
+async def submit_feedback(feedback: FeedbackRequest):
+    try:
+        # Convert Pydantic model to uAgents Model
+        agent_feedback = Feedback(**feedback.dict())
+        
+        # Send feedback to main coordinator agent
+        response = await query(
+            destination=Config.MAIN_COORDINATOR_ADDRESS,
+            message=agent_feedback,
+            timeout=30.0  # Adjust timeout as needed
+        )
+        
+        # Decode the response
+        data = json.loads(response.decode_payload())
+        return {"message": data.get("message", "Feedback submitted successfully")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/state", response_model=StateResponse)
 async def get_state():
     try:
-        # Query the main coordinator agent for the current state
-        state = await query(main_agent.address, "get_current_state")
+        # Create a StateRequest message
+        state_request = StateRequest()
         
-        if state:
-            return StateResponse(**state)
-        else:
-            raise HTTPException(status_code=500, detail="Failed to retrieve current state")
+        # Query the main coordinator agent for the current state
+        response = await query(
+            destination=Config.MAIN_COORDINATOR_ADDRESS,
+            message=state_request,
+            timeout=30.0  # Adjust timeout as needed
+        )
+        
+        # Decode the response
+        data = json.loads(response.decode_payload())
+        return StateResponse(**data)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

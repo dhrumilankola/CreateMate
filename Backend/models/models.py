@@ -31,6 +31,14 @@ class TopicRequest(Model):
     keywords: List[str]
     num_topics: int = 1
 
+class StateRequest(Model):
+    request_type: str = "get_state"
+
+class StateResponse(Model):
+    user_input: Optional[dict]
+    schedule: Optional[dict]
+    generated_content: List[dict]
+    suggested_topics: Optional[List[str]]
 
 class StoreData(Model):
     collection: str

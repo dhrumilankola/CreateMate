@@ -1,19 +1,11 @@
 import sys
 import os
 
-# Determine the current script directory
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Add the parent directory (Backend) to sys.path
-parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-from config import Config  # Import Config
+from Backend.config import Config  # Import Config
 
 from uagents import Agent, Context
 from uagents.setup import fund_agent_if_low
-from models import ContentRequest, GeneratedContent
+from Backend.models import ContentRequest, GeneratedContent
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -26,9 +18,9 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 # Content Generation Agent
 content_generation_agent = Agent(
     name="content_generation_agent",
-    seed="content_generation_agent_secret_seed_phrase",
-    endpoint=f"http://localhost:8002"
-    # endpoint=f"http://localhost:{Config.CONTENT_GENERATION_AGENT_PORT}"
+    seed=Config.CONTENT_GENERATION_AGENT_SEED,
+    port=Config.CONTENT_GENERATION_AGENT_PORT,
+    endpoint=[f"http://127.0.0.1:{Config.CONTENT_GENERATION_AGENT_PORT}/submit"]
 )
 
 # Fund the agent if needed

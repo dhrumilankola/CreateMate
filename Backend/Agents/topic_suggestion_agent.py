@@ -1,18 +1,11 @@
 import sys
 import os
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-
-# Add the parent directory (Backend) to sys.path
-parent_dir = os.path.abspath(os.path.join(current_dir, '..'))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-from config import Config  # Import Config
+from Backend.config import Config  # Import Config
 
 from uagents import Agent, Context
 from uagents.setup import fund_agent_if_low
-from models import TopicRequest, TopicSuggestion
+from Backend.models import TopicRequest, TopicSuggestion
 import google.generativeai as genai
 from typing import List
 from dotenv import load_dotenv
@@ -27,8 +20,9 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 # Topic Suggestion Agent
 topic_suggestion_agent = Agent(
     name="topic_suggestion_agent",
-    seed="topic_suggestion_agent_secret_seed_phrase",
-    endpoint=f"http://localhost:{Config.TOPIC_SUGGESTION_AGENT_PORT}"
+    seed=Config.TOPIC_SUGGESTION_AGENT_SEED,
+    port=Config.TOPIC_SUGGESTION_AGENT_PORT,
+    endpoint=[f"http://127.0.0.1:{Config.TOPIC_SUGGESTION_AGENT_PORT}/submit"]
 
 )
 
