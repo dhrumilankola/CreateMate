@@ -1,0 +1,39 @@
+# Ignore Python bytecode and compiled files
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environments
+env/
+venv/
+backend-py3.12/  # This looks like a virtual environment
+
+# Ignore environment variables files
+.env
+
+# Ignore logs and temporary files
+*.log
+*.temp
+*.tmp
+
+# Ignore Poetry-specific files
+poetry.lock  # This can be ignored if you want, but it's often committed to ensure dependency consistency
+.cache/
+*.toml# Ignore database files
+*.sqlite3
+*.db
+
+# Ignore frontend build and node modules (if you're using Node.js later)
+node_modules/
+dist/
+build/
+
+# Ignore IDE-specific files (VSCode, JetBrains, etc.)
+.vscode/
+.idea/
+
+# Ignore operating system files
+.DS_Store
+Thumbs.db
+
+# Ignore generated static assets (optional, only if applicable)
+staticfiles/

@@ -1,0 +1,10 @@
+# backend/requirements.txt
+
+uagents==0.6.0
+fastapi==0.95.0
+uvicorn==0.21.1
+pydantic==1.10.7
+python-dotenv==0.21.1
+google-generativeai==0.1.0
+pymongo==4.3.3
+requests==2.28.2
